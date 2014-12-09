@@ -1,0 +1,246 @@
+\documentclass[a4paper]{article}
+
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorinlistoftodos]{todonotes}
+
+\title{A Cryptographically Protected Phone System}
+
+\author{Andres Erbsen and Adam Yedidia}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+In today's excessively monitored and public world, there is no more privacy. An
+email can be read by Google, and a chat conversation can be read by Facebook. A
+conversation over a cell phone can be intercepted at a cell phone tower, and a
+phone conversation over a landline can be wiretapped. In the era of technology,
+there is no longer a way to communicate privately except face-to-face.
+
+No way, that is, except for cryptographically protected communications. The last
+century, in addition to bringing about the technologies mentioned above for
+communicating remotely (along with the technologies used to eavesdrop on them)
+also brought about the invention of clever cryptographic schemes for hiding
+information securely. These schemes go by many names; in our implementation, we
+will make use of a particular implementation the one called Diffie-Hellman key
+exchange. The truly incredible thing about Diffie-Hellman key exchange (along
+with a handful of other schemes which we will not use) is that it enables two
+interlocutors \emph{with no prior agreements or contact} to communicate securely
+in the presence of an eavesdropper \emph{who can hear everything they ever say
+to each other}. Conditioned on the hardness of various problems which are widely
+believed to in fact be very difficult to solve by the wider academic community,
+it is in fact provably intractable for the eavesdropper to hear the
+communications.
+
+In what follows, we will describe a hardware implementation of a telephone
+system that will be cryptographically protected in a theoretically defensible
+way; that is, for an attacker to be able to eavesdrop on a call using our
+telephone system would require either a long-standing conjecture to be false, or
+would require more vastly more computational power than is available to the
+world today.
+
+\section{Transmitting Audio}
+
+In order to transmit the audio across the channel, we will organize the audio
+signal into packets, to be sent one at a time across the channel. It is more
+efficient to perform the cryptographic calculations when the input is in
+available in larger chunks than a single audio sample. Moreover, each packet
+requires a header, which will contain a 128-bit cryptographic authenticator and
+some minimal information. The first 8 bits will indicate whether the packet
+is a data packet or some other specialized signal to the system, such as a
+command or a preliminary communication. The next 16 bits will contain a sequence
+number unique to each packet. The next 24 bits will contain a binary number that
+holds the number of bytes held in the remainder of the packet.  Finally, the
+rest of the packet holds the encrypted audio data, followed by the 128-bit
+authenticator. The header is included in the calculation of the authenticator
+and the length of the authenticator is included in the 24-bit length field.
+
+Thanks to this flexible design which allows us to vary the number of data bits
+in a packet, we will be able to tweak the number of bits we send at once because
+it is not immediately obvious what the value should be; a smaller value will
+increase the relative overhead of the packet header and make the cryptographic
+calculations less efficient. A larger packet size, however, will increase the
+latency of the system, beause the system will have to accumulate more bits
+before it can send a packet. We are likely to want a packet that is as small as
+possible without further complicating the implementation.
+
+In order to assemble a packet, we will have a buffer module which will
+accumulate the bits before sending them all at once in packet form. The buffer
+will make use of the BRAMs in order to be as efficient as possible, and because
+it will be storing a potentially large amount of memory (so simply using
+flip-flops would be a waste of valuable programmable logic).
+
+Finally, the packets themselves will be transmitted over a simple wire that
+connects two FPGA labkits, after having been encrypted by the encryption module.
+We hope that this simple method will suffice for sending a sufficiently clear
+signal; however, it is possible that the length of the wire necessary to
+transmit from one labkit to another will produce artifacts, so if that turns out
+to be the case we will ``clean'' the signal with a MAX395 chip, a chip designed
+to drive signals cleanly across long distances.
+
+\section{Cryptographic protection}
+
+As it is easy for an individual to come up with a cryptosystem that they
+themselves cannot break, but harder to create one that will withstand attacks
+from others, we will be basing our design on existing well-audited building
+blocks. As we are not aware of any freely available Verilog implementations of
+these algorithms, we will be implementing them and verify their correctness by
+comparing the behavior of our hardware implementations to the existing reference
+(software) implementations.
+
+The overall plan is as follows: in the very beginning of each call, the two
+communicating labkits will perform a Diffie-Hellman handshake to generate a
+shared secret. That secret will be used to seed a pseudo-random keystream
+generator and the digital audio signal will be xor-ed with the keystream.
+This prevents the attacker (who does not know the shared secred or the
+keystream) from recovering the audio signal. To also prevent the attacker from
+selectively modifying the audio, each audio packet will be accompanied by a
+128-bit authenticator that can only be computed for a message by a party that
+knows the secret key -- the callers, but not the attacker.
+
+\begin{description}
+  \item[Call Initialization:] Participant A chooses random $a$ and reveals $g^a$,
+	  B chooses $b$, reveals $g^b$; both compute $s=g^{ab}$. $g$ is a public constant.
+  \item[Encryption:] $\text{encrypted}_i = \text{data}_i \mathbin{\oplus} \text{keystream}(s,i)$
+  \item[Decryption:] $\text{data}_i = \text{encrypted}_i \mathbin{\oplus} \text{keystream}(s,i)$
+  \item[Packetization:] $\text{packet}_i = \left(type, i, \text{length}(\text{encrypted}_i), \text{encrypted}_i\right)$
+  \item[Authentication:] $\text{authenticator}_i = \text{hash}(s, \text{packet}_i)$
+  \item[Auth. checking:] Accept received packet iff $\text{hash}(s, \text{packet}_i) = \text{authenticator}_i$.
+\end{description}
+
+The described mechanisms are sufficient against an attacker that can only see
+what is sent over the wire but tamper with it; for example, one might cut the
+wire and connect it to their phone instead and all this would continue without
+interruption. Furthermore, they might make another call to the intended
+recipient and connect these calls while maintaining the ability to eavesdrop. To
+make sure that the two users of ours system are indeed on the same call (and
+thus not eavesdropped on), we display a value derived from the handshake inputs
+($g^a$ and $g^b$) to both of them -- if it matches, the connection hasn't been
+tampered with. Displaying just $g^a$ and $g^b$ would also work, except that each
+of them is 256 bits long and comparing them would be tedious. Instead, we
+display the first (labkit's hex display width?) bits of $\text{hash}(g^a, g^b)$,
+where the hash function is such that changing just one of the inputs would
+chaotically change the output.
+
+As classical Diffie-Hellman requires hundreds of modular arithmetic operations
+on multiple-thousand-bit numbers to be secure, we will be using a modern
+variation where every modular multiplication is replaced with the addition of
+two points on a carefully chosen elliptic curve. The other relevant properties
+of elliptic curve addition are the same as for modular multiplication, we will
+even continue to use the classical notation. Even though one elliptic curve
+addition uses more than one modular multiplication, smaller numbers can be used
+without compromising security. Our choice of primitives goes as follows:
+
+\begin{description}
+  \item[Random numbers:] Hash of 100ms of microphone input.
+  \item[Diffie-Hellman function:] Curve25519 (uses arithmetic modulo $2^{255}-19$)
+  \item[Keystream:] ChaCha20 (uses 32-bit addition, xor, and rotation by constant).
+  \item[Hash:] BLAKE (uses 32-bit addition, xor, and rotation by constant).
+\end{description}
+
+The last two are fairly straightforward to implement given the specification, as
+is implementing elliptic curve Diffie-Hellman if the underlying modular
+arithmetic is given. Arithmetic modulo $2^{255}-19$ is a little bit more
+tricky. Addition comes down to first adding the inputs mod $2^{255}$ and then
+subtracting $2^{255}-19$ if the result overflowed (both branches can be computed
+in parallel); subtraction is similar.  Multiplication is performed by breaking
+the 255-bit number into 15 17-bit digits and applying the schoolbook
+multiplication algorithm, one row of partial products at a time. To modify the
+schoolbook multiplication to work modulo $2^{255}$, the partial products that
+would be too far on the higher order side are wrap over back to the lower order
+digits; the difference between working modulo $2^{255}$ and module $2^{255}-19$
+can be corrected for by multiplying all wrapped-around partial products by 19.
+The partial products for each column are added up as they are generated. To
+compute the final 255-bit answer, we first handle carries from the higher-order
+digits that definitely cause the final answer to pass $2^{255}-19$ by adding the
+number of passes times 19 to the lowest order digit. As the carries from the
+lower order digits to the higher order digits might also cause the answer to
+pass $2^{255}-19$ (but only once), answer$-2^{255}-19$ is computed together with
+the final answer when the last carries are handled and the one that is in the
+valid range is returned. Exponentiation is implemented using the standard
+square-and-multiply technique, Fermat's little theorem is used to provide a slow
+but simple division circuit.
+
+\section{Resulting User Experience}
+
+Two labkits are connected with a couple of wires. When a connection is
+established, both hex displays show the same value. Anything spoken into one
+labkit's microphone is heard from the headphones of the other and vice versa.
+
+\section{Possible Attacks}
+
+It is the nature of practical cryptography that it is very difficult to prove the security of your system. In order to prove that nobody can break your encryption in any way, it would be necessary to prove something about the entire space of possible attacks, which is too great to comprehend, or it would be necessary to enumerate eve1y possible attack to the system and show that each fails, which is impossible. Unfortunately, the best we can do at this point is enumerate all widely-known attacks against cryptographic systems, and explain why each one cannot succeed against our system. It is possible (even likely) that there exists some attack not described here that would break our system; unfortunately, the best measure of security that we can offer against such an attack is that because people as a whole haven't thought of it yet, it's likely that a potential attacker wouldn't either.
+
+\subsection{Brute-Force Attacks} 
+
+This class of possible attacks has as its goal to learn through algorithmic means either of the interlocutors' secret keys, which will be enough to let the attacker compute the shared secret and the decryption of the message. Assuming that division in the space of elliptic curve functions is computationally difficult (which is widely believed in the academic community to be true) this class of possible attacks won't succeed against our system because of the fact that the only algorithms able to find an interlocutor's secret key as a function of their public key take exponential time; moreover, our key length is long enough that no implementation of any algorithm has come close to being able to do this.
+
+\subsection{Man-in-the-Middle Attacks}
+
+This type of attack is based off the idea of spoofing the two interlocutors into thinking that they are talking to each other, when in fact, they are both talking to the attacker and the attacker is relaying messages between them. No amount of security on the channel itself can protect against an attack of this kind, since the attacker's ability to hear the communications comes from the fact that two participants in a phone conversation can hear the communications--something that is necessary for the basic functioning of a telephone system. However, we can give t the interlocutors the ability to know when there is a man-in-the-middle attacker, by giving everyone access to the public key of a given other person, and also giving them access to the public key of the person they're talking to. If the Alice believes herself to be speaking to Bob, but is actually speaking to Eve, who is executing a man-in-the-middle attack, then she will see both Bob and Eve's public keys displayed on her phone's screen, and this will tell her that she is not speaking to the person she think she is. This is the basic idea; in reality, we would display not the public key itself (which is much too long to display) but a hash thereof, and if Bob and Eve's public keys were different, then the hashes would be virtually certain to also be different, assuming we used a cryptographic hash function (a hash function which is computationally difficult to invert).
+
+\subsection{Packet Structure}
+
+Our system makes use of two different types of data packets that can be sent over the wire. We call the two types of packets \emph{handshake packets} and \emph{audio packets} respectively. 
+
+% handshake packet diagram goes here
+
+% caption
+Both packets begin with a \emph{packet header}: a string of bits, 10101011, that gets sent over the wire to notify the receiving labkit that transmission of the packet body is about to begin. 
+
+The packet body is different for each packet. Handshake packets contain the following components: \\ \\
+-An acknowledgement byte (8 bits), depending on whether or not the labkit sending the handshake packet has yet successfully received a handshake packet from its partner. An acknowledgement byte of 01100110 means ``I have not yet received a handshake packet from you'' and an acknowledgement byte of 100110011 means ``I have received a handshake packet from you.'' 
+-The transmitter's unmodified public key (256 bits). Note that because this key is being transmitted over the channel without any modification, an attacker can read the public key; however, due to modern cryptographic hardness conjectures, an attacker with access to both public keys would not be able to find the shared key without running an algorithm that would take years if not millenia to complete (without drastically improving state-of-the-art elliptic-curve-discrete-logarithm algorithms).
+
+Audio packets contain the following components: \\ \\
+-A sequence number (32 bits). If this is the $i^{\textrm{th}}$ packet that has been sent over the wire during this phone conversation, then the sequence number would have a value of $i$. Note that because our sequence numbers have a fixed length of 32 bits, no more than $2^32 \approx $ 4 billion packets can be sent over the wire before the conversation becomes insecure; however, given that we only send 48,000 packets per second over the wire, the phone conversation can last about 100,000 seconds or roughly one day before it is insecure: more than the length of most any phone conversation between two ordinary people. If this design was to be used in a situation where communication was going to last for weeks or months, it would be wise to increase the size of this sequence number to 64 bits.
+-Encrypted audio data. This is the result of a bitwise XOR operation that has been performed between the audio data and the output of the CHACHA module, which outputs the cryptographic bit-stream. An attacker with access to this audio data and the public keys of both participants in the conversation cannot in a practical way deduce what is being said in the conversation.
+
+
+
+
+Hanshake packets consist of three parts: the first is the packet header, which alerts the receiving system that packet transmission is about to begin.
+
+\subsection{Heating/Timing Attacks}
+
+% I don't have time fill this out or delete this section
+
+\section{Our design}
+
+In this section, we give a detailed description of our design and how it works. Below is a block diagram of our overall design:
+
+% bock diagram here
+
+\subsection{Curve25519}
+
+% this one's all yours
+
+\subsection{Sending FSM}
+
+This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman handshake that will communicate the shared key to both participants. It consists of the following seven states, each one leading directly into the next:
+
+-Waiting for start pulse: the state machine is idle and waiting to be told to begin.
+-Computing the public key: the state machine takes as input a secret key seed, feeds it into the CURVE_25519 module, and waits for the computation to terminate.
+-Sending the public key (no acknowledgement): the state machine sends its public key over the wire in a handshake packet, with an acknowledgement byte indicating that it has not yet received a handshake packet from its partner. It waits to receive a handshake packet from its partner.
+-Sending the public key (with acknowledgement): the state machine sends its public key over the in a handshake packet, with an acknowledgement byte indicating that it has successfully received a handshake packet from its partner. It waits to receive a handshake packet containing an acknowledgement byte confirming successful receipt in the other direction.
+-Reading the partner's public key: at this point, both partners have confirmed that the other has succeeded in receiving a handshake packet. The state machine proceeds to read its partner's public key. 
+-Computing the shared key: the state machine generates the shared key by feeding both its secret key seed and its partner's public key and feeding them into the CURVE_25519 module.
+-Handshake complete: the state machine is idle and outputs the shared key.
+
+\subsection{SERIAL PORT}
+
+\subsection{
+
+\subsection
+
+
+
+
+
+\end{document}
