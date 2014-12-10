@@ -1,4 +1,4 @@
-\subsection{Curve25519 Key Exchange}\label{curve25519-key-exchange}
+\section{Curve25519 Key Exchange}\label{curve25519-key-exchange}
 
 As classical Diffie-Hellman-Merkle key-exchange requires hundreds of
 modular arithmetic operations on multiple-thousand-bit numbers to be
@@ -15,7 +15,7 @@ multiply, leading to 10 times less chip area and time usage.
 The elliptic curve cryptography implementation is the most technically
 involved part of this project. {[}@Curve25519{]} gives explicit formulas
 for the elliptic curve arithmetic in terms of operations on integers
-modulo the prime \(p=2^{255} - 19\). Our implementation of the
+modulo the prime \(p=2^{255} -19\). Our implementation of the
 \texttt{curve25519} module follows the figure presented in the appendix
 of that paper and makes use of the properties of our modular arithmetic
 modules to provide better performance. The main computation consists of
@@ -43,12 +43,13 @@ area at the expense of speed, and implementing a dedicated modular
 division (inversion) unit would allow for significantly better
 performance at even larger expense of area.
 
-\subsubsection{Modular multiplication}\label{modular-multiplication}
+\subsection{Modular multiplication}\label{modular-multiplication}
 
-We took advantage of the pseudo-Mersenne structure of the modulus
-(\$p=2\^{}\{255\}-19) and the availability of 18-by-18-bit multipliers
-to create implement an efficient modular multiplication unit. The
-overall strategy goes as follows:
+We took advantage of the fact that the modulus (\(p=2^{255}-19\)) was
+known at the design time, that it is very close to a power of two, and
+the availability of 18-by-18-bit multipliers to create implement an
+efficient modular multiplication unit. The overall strategy goes as
+follows:
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -105,7 +106,7 @@ provides fast 17-by-17-bit multipliers in dedicated silicon, the main
 area usage is due to the the accumulator and operand registers, and the
 42-bit adders used for adding up columns and propagating carries.
 
-\subsubsection{Modular Addition and
+\subsection{Modular Addition and
 Subtraction}\label{modular-addition-and-subtraction}
 
 Addition and subtraction also operate on 15 17-bit digits. While a
@@ -130,13 +131,13 @@ would be possible to save some circuit area at negligible speed cost by
 having one circuit that allows the operation to be indicated using an
 input.
 
-\subsubsection{Modular Inversion
+\subsection{Modular Inversion
 (Division)}\label{modular-inversion-division}
 
-Our system computes \(\frac{b}{a}\) as \(a \frac{1}{a}\). Calculating
-\(\frac{1}{a}\) is implemented through exponentiation and multiplication
-by Fermat's little theorem (\(a^{p-2} = a^{-1}\) mod p), and
-exponentiation is done as repeated squaring and multiplication:
+Our system computes \(\frac{b}{a}\) as \(b\cdot\frac{1}{a}\).
+Calculating \(\frac{1}{a}\) is implemented through exponentiation and
+multiplication by Fermat's little theorem (\(a^{p-2} = a^{-1}\) mod p),
+and exponentiation is done as repeated squaring and multiplication:
 \(x^n= x \, ( x^{2})^{\frac{n - 1}{2}} \mbox{ if } n \mbox{ is odd, otherwise } (x^{2})^{\frac{n}{2}}\).
 While we are aware of more complicated methods that allow to perform
 modular inversion faster, we chose this one because it requires almost
@@ -145,7 +146,7 @@ one fifth of the total modular multiplications and one fourth of the
 running time (because the ladder step is pipelined and inversion is
 not).
 
-\subsection{ChaCha20 Stream Cipher}\label{chacha20-stream-cipher}
+\section{ChaCha20 Stream Cipher}\label{chacha20-stream-cipher}
 
 ChaCha20 is a modern stream cipher. Given a secret key, it provides fast
 random access to different positions of \(2^{130}\)-byte keystream which
@@ -165,7 +166,7 @@ frequencies under 50MHz. In our case it was not an issue (we are using a
 27MHz), but a higher frequency implementation would probably need to
 pipeline the quarter round function.
 
-\subsection{Keccak hash function}\label{keccak-hash-function}
+\section{Keccak hash function}\label{keccak-hash-function}
 
 We used an open-source Keccak implementation by Homer Hsing, available
 at \texttt{opencores.org}. The input is sent to the Keccak module in
