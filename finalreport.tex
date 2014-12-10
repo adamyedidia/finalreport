@@ -7,11 +7,6 @@
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage[colorlinks]{hyperref}
 
-\usepackage{tikz}
-\usepackage{geometry}
-\usetikzlibrary{matrix,chains,positioning,shapes,arrows,fit,calc}
-
-
 \title{A Cryptographically Protected Phone System}
 
 \author{Andres Erbsen and Adam Yedidia}
@@ -40,10 +35,10 @@ determine the encryption protocol. The truly incredible thing about the Diffie-H
 with a handful of other schemes which we did not use) is that it enables two
 interlocutors \emph{with no prior agreements or contact} to communicate securely
 in the presence of an eavesdropper \emph{who can hear everything they ever say
-to each other, including the entire handshake}[1][2]. Conditioned on the hardness of various problems which are widely
+to each other, including the entire handshake}. Conditioned on the hardness of various problems which are widely
 believed to in fact be very difficult to solve by the wider academic community,
 it is in fact provably intractable for the eavesdropper to hear the
-communications[3].
+communications.
 
 In what follows, we will % this will is intentional
 give a detailed description a hardware implementation of a telephone
@@ -93,28 +88,15 @@ communicating labkits perform a Diffie-Hellman-Merkle handshake to generate a
 shared secret. That secret is used to seed a pseudo-random keystream
 generator and the digital audio signal will be xor-ed with the keystream.
 This prevents the attacker (who does not know the shared secret or the
-keystream) from recovering the audio signal.
+keystream) from recovering the audio signal. 
 
-
-\begin{figure}[h!]
-\centering
-\begin{tikzpicture}
-\matrix (m)[matrix of nodes, column  sep=1cm,row  sep=1mm, nodes={draw=none, anchor=center,text depth=0pt} ]{
-Alice & $g=9 \in \text{Curve25519}$ & Bob\\
-Randomly pick& & Randomly pick\\
-$a \in \{0,1\}^{256}.$ & & $b \in \{0,1\}^{256}.$ \\
-	Send $g^a$ & \mbox{ } & Send $g^b$ \\
-Compute $k_a=(g^b)^a$ & $(g^b)^a=(g^a)^b$ & Compute $k_b=(g^a)^b$ \\
-	Display $k$ & $k_a=k=k_b$ & Display $k$ \\
-};
-
-\draw[shorten <=-1.5cm,shorten >=-1.5cm] (m-1-1.south east)--(m-1-1.south west);
-\draw[shorten <=-1.5cm,shorten >=-1.5cm] (m-1-3.south east)--(m-1-3.south west);
-\draw[shorten <=-1cm,shorten >=-1cm,-latex] (m-4-2.south west)--(m-4-2.south east);
-\draw[shorten <=-1cm,shorten >=-1cm,-latex] (m-4-2.south east)--(m-4-2.south west);
-\end{tikzpicture}
-\caption{Commit-and-reveal Diffie-Hellman-Merkle Handshake}
-\end{figure}
+\begin{description}
+  \item[Call Initialization:] Participant A chooses random $a$ and reveals $g^a$,
+	  B chooses $b$, reveals $g^b$; both compute $s=g^{ab}$. $g$ is a public constant.
+  \item[Encryption:] $\text{encrypted}_i = \text{data}_i \mathbin{\oplus} \text{keystream}(s,i)$
+  \item[Decryption:] $\text{data}_i = \text{encrypted}_i \mathbin{\oplus} \text{keystream}(s,i)$
+  \item[Packetization:] $\text{packet}_i = (\text{header}, \text{sequence number}, \text{encrypted}_i)$
+\end{description}
 
 The described mechanisms are sufficient against an attacker that can not only see
 what is sent over the wire but tamper with it; for example, one might cut the
@@ -135,10 +117,33 @@ without compromising security. Our choice of primitives goes as follows:
 
 \begin{description}
   \item[Random numbers:] Hash of 100ms of microphone input.
-  \item[Diffie-Hellman-Merkle function:] Curve25519[8] (uses arithmetic modulo $2^{255}-19$)
-  \item[Keystream:] ChaCha20[5] (uses 32-bit addition, xor, and rotation by constant).
+  \item[Diffie-Hellman-Merkle function:] Curve25519 (uses arithmetic modulo $2^{255}-19$)
+  \item[Keystream:] ChaCha20 (uses 32-bit addition, xor, and rotation by constant).
   \item[Hash:] BLAKE (uses 32-bit addition, xor, and rotation by constant).
 \end{description}
+
+The last two were fairly straightforward to implement given the specification, as
+is implementing elliptic curve Diffie-Hellman-Merkle if the underlying modular
+arithmetic is given. Arithmetic modulo $2^{255}-19$ is a little bit more
+tricky. Addition comes down to first adding the inputs mod $2^{255}$ and then
+subtracting $2^{255}-19$ if the result overflowed (both branches can be computed
+in parallel); subtraction is similar.  Multiplication is performed by breaking
+the 255-bit number into 15 17-bit digits and applying the schoolbook
+multiplication algorithm, one row of partial products at a time. To modify the
+schoolbook multiplication to work modulo $2^{255}$, the partial products that
+would be too far on the higher order side are wrap over back to the lower order
+digits; the difference between working modulo $2^{255}$ and module $2^{255}-19$
+can be corrected for by multiplying all wrapped-around partial products by 19.
+The partial products for each column are added up as they are generated. To
+compute the final 255-bit answer, we first handle carries from the higher-order
+digits that definitely cause the final answer to pass $2^{255}-19$ by adding the
+number of passes times 19 to the lowest order digit. As the carries from the
+lower order digits to the higher order digits might also cause the answer to
+pass $2^{255}-19$ (but only once), answer$-2^{255}-19$ is computed together with
+the final answer when the last carries are handled and the one that is in the
+valid range is returned. Exponentiation is implemented using the standard
+square-and-multiply technique, Fermat's little theorem is used to provide a slow
+but simple division circuit.
 
 \section{Resulting User Experience}
 
@@ -178,13 +183,13 @@ Our implementation is split into two ``phases'': Phase 1, in which the handshake
 
 \begin{figure}
 \label{fig3}
-\makebox[\textwidth][c]{\includegraphics[width=1.5\textwidth]{figs/phase1.png}}%
+\makebox[\textwidth][c]{\includegraphics[width=1.2\textwidth]{figs/phase1.png}}%
 \centering \caption{A block diagram of the execution of Phase 1. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
 \end{figure}
 
 \begin{figure}
 \label{fig3b}
-\makebox[\textwidth][c]{\includegraphics[width=1.5\textwidth]{figs/phase2.png}}%
+\makebox[\textwidth][c]{\includegraphics[width=1.2\textwidth]{figs/phase2.png}}%
 \centering \caption{A block diagram of the execution of Phase 2. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
 \end{figure}
 
