@@ -179,6 +179,12 @@ frequencies under 50MHz. In our case it was not an issue (we are using a
 27MHz), but a higher frequency implementation would probably need to
 pipeline the quarter round function.
 
+Note that it is critical that the same part is the keystream is not used
+to encrypt two different messages (in the same or different directions).
+To prevent this, we use the labkit identity (Alice or Bob) indicated by
+\texttt{switch{[}7{]}} and the packet number to index into the
+keystream.
+
 \section{Keccak hash function}\label{keccak-hash-function}
 
 \emph{Author of section: Andres Erbsen.}\\We used an open-source Keccak
