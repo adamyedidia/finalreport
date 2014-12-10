@@ -116,14 +116,6 @@ Compute $k_a=(g^b)^a$ & $(g^b)^a=(g^a)^b$ & Compute $k_b=(g^a)^b$ \\
 \caption{Commit-and-reveal Diffie-Hellman-Merkle Handshake}
 \end{figure}
 
-\begin{description}
-  \item[Call Initialization:] Participant A chooses random $a$ and reveals $g^a$,
-	  B chooses $b$, reveals $g^b$; both compute $s=g^{ab}$. $g$ is a public constant.
-  \item[Encryption:] $\text{encrypted}_i = \text{data}_i \mathbin{\oplus} \text{keystream}(s,i)$
-  \item[Decryption:] $\text{data}_i = \text{encrypted}_i \mathbin{\oplus} \text{keystream}(s,i)$
-  \item[Packetization:] $\text{packet}_i = (\text{header}, \text{sequence number}, \text{encrypted}_i)$
-\end{description}
-
 The described mechanisms are sufficient against an attacker that can not only see
 what is sent over the wire but tamper with it; for example, one might cut the
 wire and connect it to their phone instead and all this would continue without
