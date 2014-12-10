@@ -1,4 +1,4 @@
-\documentclass[a4paper]{article}
+\documentclass[a4paper]{report}
 
 \usepackage[english]{babel}
 \usepackage[utf8]{inputenc}
@@ -28,7 +28,7 @@ century, in addition to bringing about the technologies mentioned above for
 communicating remotely (along with the technologies used to eavesdrop on them)
 also brought about the invention of clever cryptographic schemes for hiding
 information securely. These schemes go by many names; in our implementation, we
-will make use of a particular implementation the one called Diffie-Hellman key
+made use of a particular implementation the one called Diffie-Hellman key
 exchange. The truly incredible thing about Diffie-Hellman key exchange (along
 with a handful of other schemes which we will not use) is that it enables two
 interlocutors \emph{with no prior agreements or contact} to communicate securely
@@ -38,12 +38,14 @@ believed to in fact be very difficult to solve by the wider academic community,
 it is in fact provably intractable for the eavesdropper to hear the
 communications.
 
-In what follows, we will describe a hardware implementation of a telephone
+In what follows, we will give a detailed description a hardware implementation of a telephone
 system that will be cryptographically protected in a theoretically defensible
 way; that is, for an attacker to be able to eavesdrop on a call using our
 telephone system would require either a long-standing conjecture to be false, or
 would require more vastly more computational power than is available to the
-world today.
+world today. We begin this report with a high-level description of the ideas and concepts behind what we did; in the second half of the 
+
+\chapter{High-Level Description}
 
 \section{Transmitting Audio}
 
@@ -66,7 +68,7 @@ in a packet, we will be able to tweak the number of bits we send at once because
 it is not immediately obvious what the value should be; a smaller value will
 increase the relative overhead of the packet header and make the cryptographic
 calculations less efficient. A larger packet size, however, will increase the
-latency of the system, beause the system will have to accumulate more bits
+latency of the system, because the system will have to accumulate more bits
 before it can send a packet. We are likely to want a packet that is as small as
 possible without further complicating the implementation.
 
@@ -185,62 +187,146 @@ This class of possible attacks has as its goal to learn through algorithmic mean
 
 This type of attack is based off the idea of spoofing the two interlocutors into thinking that they are talking to each other, when in fact, they are both talking to the attacker and the attacker is relaying messages between them. No amount of security on the channel itself can protect against an attack of this kind, since the attacker's ability to hear the communications comes from the fact that two participants in a phone conversation can hear the communications--something that is necessary for the basic functioning of a telephone system. However, we can give t the interlocutors the ability to know when there is a man-in-the-middle attacker, by giving everyone access to the public key of a given other person, and also giving them access to the public key of the person they're talking to. If the Alice believes herself to be speaking to Bob, but is actually speaking to Eve, who is executing a man-in-the-middle attack, then she will see both Bob and Eve's public keys displayed on her phone's screen, and this will tell her that she is not speaking to the person she think she is. This is the basic idea; in reality, we would display not the public key itself (which is much too long to display) but a hash thereof, and if Bob and Eve's public keys were different, then the hashes would be virtually certain to also be different, assuming we used a cryptographic hash function (a hash function which is computationally difficult to invert).
 
-\subsection{Packet Structure}
+\subsection{Data Manipulation Attacks}
 
-Our system makes use of two different types of data packets that can be sent over the wire. We call the two types of packets \emph{handshake packets} and \emph{audio packets} respectively. 
+These attacks consist of manipulating the data cleverly; for example, it might be imagined that in an insecure cryptographic system, an attacker might be able to computer the \verb|XOR| of the data on the wire from Alice to Bob and the wire from Bob to Alice, for example. % I will write more in a bit
+
+\chapter{Detailed Implementation}
+
+In this section, we give a detailed description of our design and how it works. In the pages that follow, we provide two block diagrams that provide a visual summary of our design. In the text, we describe in detail the working of each of the modules shown in the block diagram.
+
+\begin{figure}
+\label{fig3}
+\centering \caption{A block diagram of the execution of Phase 1. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
+\makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase1.png}}%
+\end{figure}
+
+\begin{figure}
+\label{fig3}
+\centering \caption{A block diagram of the execution of Phase 2. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
+\makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase2.png}}%
+\end{figure}
+
+\section{Controller}
+
+This part of the code did not have its own module, nor did it consist of very much distinct code; however, it is present in the block diagram as a design abstraction, which controls the flow of the system from Phase 1 (handshake) into Phase 2 (audio). Upon turning on the labkit, it tells the Handshake FSM module to begin the handshake; upon successful completion of the handshake, it takes the shared key output by the Handshake FSM module, feeds it into the Chacha20 module, and begins Phase 2. It can be thought of as a very high-level state machine with two states over the entire design.
+
+\section{Handshake FSM}
+
+This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman handshake that will communicate the shared key to both participants. It consists of the following seven states, each one leading directly into the next: \\ \\
+1. Waiting for start pulse: the state machine is idle and waiting to be told to begin. \\
+2. Computing the public key: the state machine takes as input a secret key seed, feeds it into the Curve25519 module, and waits for the computation to terminate. \\
+3. Sending the public key (no acknowledgement): the state machine sends its public key over the wire in a handshake packet, with an acknowledgement byte indicating that it has not yet received a handshake packet from its partner. It waits to receive a handshake packet from its partner. \\
+4. Sending the public key (with acknowledgement): the state machine sends its public key over the in a handshake packet, with an acknowledgement byte indicating that it has successfully received a handshake packet from its partner. It waits to receive a handshake packet containing an acknowledgement byte confirming successful receipt in the other direction. \\
+5. Reading the partner's public key: at this point, both partners have confirmed that the other has succeeded in receiving a handshake packet. The state machine proceeds to read its partner's public key. 
+6. Computing the shared key: the state machine generates the shared key by feeding both its secret key seed and its partner's public key and feeding them into the Curve25519 module. \\
+7. Handshake complete: the state machine is idle and outputs the shared key. \\
+
+\section{Serial Port Modules}
+
+This pair of modules, SendFrame and ReceiveFrame, are in charge of sending data over the wire that connects the two labkits. SendFrame sends a byte of data over the wire by repeatedly calling SendBit on both the packet header and whatever information follows. \\
+
+SendBit sends a single bit over the wire, by first setting the data wire to whatever that voltage that bit corresponds to, and then setting the \verb|DATA READY| wire to high one clock cycle later (indicating that data is available to be read on the data line). \\
+
+ReceiveFrame reads a single byte off the data wire by calling ReadBit on the data wire whenever the \verb|DATA READY| signal goes high. ReadBit reads the data off the wire. ReceiveFrame knows to start parsing the information on the wire as relevant as soon as a packet header is seen. \\
+
+Because of the fact that our roughly 500mm-long wire is imperfect, errors in communication routinely occur over the wire if each bit is read off the wire only once (about one to ten errors per second). These errors are still infrequent compared to the frequency with which sound data is sent (one byte per 20 $\mu s$), but these errors can produce unpleasant popping noises over the phone line, and worse, if such an error is made during the Diffie-Hellman handshake, one of the two partners may get the wrong public key data, causing the two partners to differ about the value of the shared key and rendering all communication impossible. \\
+
+For this reason, the ReceiveBit module ``oversamples'' the data line, meaning that it samples three times, and takes the bit it saw most frequently from those three samples. Because errors happen roughly once in a million bits sent over the wire, the probability that two out of three given samples will be erroneous (making the possibly-dubious assumption that each sample is independent) is roughly one in 300 billion. This vastly reduced probability of error was enough for us to never observe any popping over the wire.
+
+\section{Packet Structure}
+
+Our system makes use of two different types of data packets that can be sent over the wire. We call the two types of packets \emph{handshake packets} and \emph{audio packets} respectively.  \\
 
 % handshake packet diagram goes here
 
 % caption
-Both packets begin with a \emph{packet header}: a string of bits, 10101011, that gets sent over the wire to notify the receiving labkit that transmission of the packet body is about to begin. 
+Both packets begin with a \emph{packet header}: a string of bits, 10101011, that gets sent over the wire to notify the receiving labkit that transmission of the packet body is about to begin.  \\
 
-The packet body is different for each packet. Handshake packets contain the following components: \\ \\
--An acknowledgement byte (8 bits), depending on whether or not the labkit sending the handshake packet has yet successfully received a handshake packet from its partner. An acknowledgement byte of 01100110 means ``I have not yet received a handshake packet from you'' and an acknowledgement byte of 100110011 means ``I have received a handshake packet from you.'' 
+The packet body is different for each packet. Handshake packets contain the following components, which make up 272 bits: \\ \\
+-An acknowledgement byte (8 bits), depending on whether or not the labkit sending the handshake packet has yet successfully received a handshake packet from its partner. An acknowledgement byte of 01100110 means ``I have not yet received a handshake packet from you'' and an acknowledgement byte of 100110011 means ``I have received a handshake packet from you.''  \\
 -The transmitter's unmodified public key (256 bits). Note that because this key is being transmitted over the channel without any modification, an attacker can read the public key; however, due to modern cryptographic hardness conjectures, an attacker with access to both public keys would not be able to find the shared key without running an algorithm that would take years if not millenia to complete (without drastically improving state-of-the-art elliptic-curve-discrete-logarithm algorithms).
 
-Audio packets contain the following components: \\ \\
--A sequence number (32 bits). If this is the $i^{\textrm{th}}$ packet that has been sent over the wire during this phone conversation, then the sequence number would have a value of $i$. Note that because our sequence numbers have a fixed length of 32 bits, no more than $2^32 \approx $ 4 billion packets can be sent over the wire before the conversation becomes insecure; however, given that we only send 48,000 packets per second over the wire, the phone conversation can last about 100,000 seconds or roughly one day before it is insecure: more than the length of most any phone conversation between two ordinary people. If this design was to be used in a situation where communication was going to last for weeks or months, it would be wise to increase the size of this sequence number to 64 bits.
--Encrypted audio data. This is the result of a bitwise XOR operation that has been performed between the audio data and the output of the CHACHA module, which outputs the cryptographic bit-stream. An attacker with access to this audio data and the public keys of both participants in the conversation cannot in a practical way deduce what is being said in the conversation.
+Audio packets contain the following components, which make up 552 bits: \\ \\
+-A sequence number (32 bits). If this is the $i^{\textrm{th}}$ packet that has been sent over the wire during this phone conversation, then the sequence number would have a value of $i$. Note that because our sequence numbers have a fixed length of 32 bits, no more than $2^{32} \approx $ 4 billion packets can be sent over the wire before the conversation becomes insecure; however, given that we only send 48,000 packets per second over the wire, the phone conversation can last about 100,000 seconds or roughly one day before it is insecure: more than the length of most any phone conversation between two ordinary people. If this design was to be used in a situation where communication was going to last for weeks or months, it would be wise to increase the size of this sequence number to 64 bits. \\
+-Encrypted audio data (512 bits). This is the result of a bitwise XOR operation that has been performed between the audio data and the output of the Chacha20 module, which outputs the cryptographic bit-stream. An attacker with access to this audio data and the public keys of both participants in the conversation cannot in a practical way deduce what is being said in the conversation. \\
 
+\begin{figure}
+\label{fig1}
+\centering \caption{The layout of the two types of packets.} \includegraphics[width=\textwidth]{figs/packets.png}
+\end{figure}
 
+\section{Buffer Logic}
 
+In the code, we did not give this part of the program an actual separate module, but instead put it directly into \verb|labkit.v|. However, both the few lines contained in the execution of the logic and our behavior in how we structured it belie its complexity; this was a very difficult module, both to think about and to execute properly. \\
 
-Hanshake packets consist of three parts: the first is the packet header, which alerts the receiving system that packet transmission is about to begin.
+The idea of the module is that it must fill buffers with data (be it audio data or handshake data), so that it can be passed, preceded by a packet header, to the serial-port code, which can then send it over the wire. Unfortunately, this is complicated by the fact that if a buffer were to be modified during sending, that could lead to malformed packets being sent: a potential irritant for the user if it happens while audio data is being sent, and potentially catastrophic if it happens during the Diffie-Hellman handshake. \\
 
-\subsection{Heating/Timing Attacks}
+To avoid this possibility, the module uses two BRAMs acting as buffers on both the sending and the receiving side, each with 64 slots containing one byte each. While the data from one of the two buffers is being sent over the wire, the other buffer is free to be written into for the next send. Then, when the send on the current buffer finishes, the two buffers switch roles, with the first being ready to be written into and the second relaying its data to the serial port logic to be sent.
 
-% I don't have time fill this out or delete this section
+\section{Curve25519}
 
-\section{Our design}
+The elliptic curve cryptography implementation is the most technically involved
+part of this project. [@Curve25519] gives explicit formulas for the elliptic
+curve arithmetic in terms of operations on integers modulo $2^{255} - 19$. Our
+implementation of the `curve25519` module follows the figure presented in the
+appendix of that paper and makes use of the properties of our modular arithmetic
+modules to provide better performance. To save area, the circuit has only one
+copy of the modular multiplication unit and one add/subtract unit; these are
+used in sequence to compute the elliptic curve operation. Furthermore, as the
+latency of our modular multiplication unit is twice as high as the latency of
+the addition/subtraction unit, but the throughput is the same, we did our best
+to keep the multiplication pipeline active at all times. This results in using 7
+255-bit registers to store the intermediate values, in addition to the internal
+registers of the modular arithmetic units. All in all, our implementation
+requires less than 70000 cycles to perform an elliptic curve operation (public
+key generation or shared key generation). Our implementation is a trade-off
+between speed, circuit area, and complexity. We believe that more careful
+pipeline management could offer slightly better speeds for any area, storing the
+intermediate values of the elliptic curve operations in block RAM instead of
+registers would allow for a smaller area at the expense of speed, and
+implementing a dedicated modular division (inversion) unit would allow for
+significantly better performance at even larger expense of area.
 
-In this section, we give a detailed description of our design and how it works. Below is a block diagram of our overall design:
+\section{Modular Multiplication}
 
-% bock diagram here
+We took advantage of the pseudo-Mersenne structure of the modulus
+($p=2^{255}-19$) and the availability of 18-by-18-bit multipliers to create
+implement an efficient modular multiplication unit. The overall strategy goes as
+follows: \\ \\
+1. Interpret each 255-bit input as 15 17-bit digits. While it would have been
+possible to use 18-bit digits, choosing 17 greatly simplifies the implementation
+because 255 bits can be evenly divided into 17-bit digits but not into 18-bit
+digits. \\
+2. Perform an algorithm similar to schoolbook multiplication, where \\
+- During each clock cycle, one row of partial products is computed \\
+- Each partial product that would eventually overflow the 255-bit result
+because of its position is omitted from the calculation. \\
+- However, the overflowing partial product is not discarded. As the modulus
+is \emph{not} a power of two, correct for the difference between two's
+complement integer overflow and addition mod $p$ by adding 19 times the number
+of times the overflow wrapped around to the result. Because there must be an
+empty low order partial product slot for each partial product that is statically
+known to overflow, no addition needs to be performed: the just system places 19
+times the overflowing partial product to the correct slot. \\
+3. Cumulatively add up the columns of partial products, but do not handle
+carries between them. The sum of each column has an upper bound of 42 bits
+because it is a sum of 17 products of two 17-bit numbers times 19. \\
+4. Handle carries from the two most significant columns, adding the number of
+overflows times 19 to the result as before. \\
+5. Handle all remaining carries starting from the least significant column and
+moving towards towards the most significant column. The result will be
+between $0$ and $2p$. \\
+6. If the result overflows (has a carry of 1), subtract $p$ from it. This is \emph{not}  implemented as a
+separate step. Instead, there are two copies of steps 4 and 5, one of which
+works as described and the other subtracts the appropriate digit of $p$ while
+handling each carry. The correct output is selected amongst the two branches
+using the carry bit. \\
 
-\subsection{Curve25519}
-
-% this one's all yours
-
-\subsection{Sending FSM}
-
-This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman handshake that will communicate the shared key to both participants. It consists of the following seven states, each one leading directly into the next:
-
--Waiting for start pulse: the state machine is idle and waiting to be told to begin.
--Computing the public key: the state machine takes as input a secret key seed, feeds it into the CURVE_25519 module, and waits for the computation to terminate.
--Sending the public key (no acknowledgement): the state machine sends its public key over the wire in a handshake packet, with an acknowledgement byte indicating that it has not yet received a handshake packet from its partner. It waits to receive a handshake packet from its partner.
--Sending the public key (with acknowledgement): the state machine sends its public key over the in a handshake packet, with an acknowledgement byte indicating that it has successfully received a handshake packet from its partner. It waits to receive a handshake packet containing an acknowledgement byte confirming successful receipt in the other direction.
--Reading the partner's public key: at this point, both partners have confirmed that the other has succeeded in receiving a handshake packet. The state machine proceeds to read its partner's public key. 
--Computing the shared key: the state machine generates the shared key by feeding both its secret key seed and its partner's public key and feeding them into the CURVE_25519 module.
--Handshake complete: the state machine is idle and outputs the shared key.
-
-\subsection{SERIAL PORT}
-
-\subsection{
-
-\subsection
-
-
-
-
+The breakdown of time usage is roughly as follows: step 2 takes 17 cycles, step
+4 takes 1 cycle, and step 5 takes 17 cycles. As the FPGA provides fast
+17-by-17-bit multipliers in dedicated silicon, the main area usage is due to the
+the accumulator registers and the 42-bit adders used for adding up columns and
+propagating carries.
 
 \end{document}
