@@ -5,6 +5,7 @@
 \usepackage{amsmath}
 \usepackage{graphicx}
 \usepackage[colorinlistoftodos]{todonotes}
+\usepackage[colorlinks]{hyperref}
 
 \title{A Cryptographically Protected Phone System}
 
@@ -15,7 +16,7 @@
 \begin{document}
 \maketitle
 
-\section{Introduction}
+\section*{Introduction}
 
 In today's excessively monitored and public world, there is no more privacy. An
 email can be read by Google, and a chat conversation can be read by Facebook. A
@@ -94,9 +95,7 @@ keystream) from recovering the audio signal.
 	  B chooses $b$, reveals $g^b$; both compute $s=g^{ab}$. $g$ is a public constant.
   \item[Encryption:] $\text{encrypted}_i = \text{data}_i \mathbin{\oplus} \text{keystream}(s,i)$
   \item[Decryption:] $\text{data}_i = \text{encrypted}_i \mathbin{\oplus} \text{keystream}(s,i)$
-  \item[Packetization:] $\text{packet}_i = \left(type, i, \text{length}(\text{encrypted}_i), \text{encrypted}_i\right)$
-  \item[Authentication:] $\text{authenticator}_i = \text{hash}(s, \text{packet}_i)$
-  \item[Auth. checking:] Accept received packet iff $\text{hash}(s, \text{packet}_i) = \text{authenticator}_i$.
+  \item[Packetization:] $\text{packet}_i = (\text{header}, \text{sequence number}, \text{encrypted}_i)$
 \end{description}
 
 The described mechanisms are sufficient against an attacker that can not only see
@@ -184,14 +183,14 @@ Our implementation is split into two ``phases'': Phase 1, in which the handshake
 
 \begin{figure}
 \label{fig3}
+\makebox[\textwidth][c]{\includegraphics[width=1.5\textwidth]{figs/phase1.png}}%
 \centering \caption{A block diagram of the execution of Phase 1. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
-\makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase1.png}}%
 \end{figure}
 
 \begin{figure}
 \label{fig3b}
+\makebox[\textwidth][c]{\includegraphics[width=1.5\textwidth]{figs/phase2.png}}%
 \centering \caption{A block diagram of the execution of Phase 2. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
-\makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase2.png}}%
 \end{figure}
 
 \section{Controller}
@@ -234,7 +233,8 @@ Our system makes use of two different types of data packets that can be sent ove
 
 \begin{figure}
 \label{fig1}
-\centering \caption{The layout of the two types of packets.} \includegraphics[width=\textwidth]{figs/packets.png}
+\includegraphics[width=\textwidth]{figs/packets.png}
+\centering \caption{The layout of the two types of packets.} 
 \end{figure}
 
 Both packets begin with a \emph{packet header}: a string of bits, 10101011, that gets sent over the wire to notify the receiving labkit that transmission of the packet body is about to begin.  \\
@@ -332,4 +332,7 @@ propagating carries.
 
 We successfully implemented a fully functional phone system that is safe from eavesdropping against any currently-known attacks. Our phone system remains less practical than a cell phone from a usability point of view; however, we hope that this report helps make clear that implementations of cryptography that protect communications from eavesdropping are entirely practical to implement. There isn't a good reason why many of our communications aren't cryptographically protected. We hope that in the future, measures similar to the ones we implemented are adopted.
 
+\input{crypto.tex}
+
+\input{references.tex}
 \end{document}
