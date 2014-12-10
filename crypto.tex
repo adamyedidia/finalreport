@@ -1,7 +1,5 @@
 \section{Curve25519 Key Exchange}\label{curve25519-key-exchange}
 
-\emph{Author of section: Andres Erbsen}
-
 As classical Diffie-Hellman-Merkle key-exchange requires hundreds of
 modular arithmetic operations on multiple-thousand-bit numbers to be
 secure, we will be using a modern variation where every modular
@@ -50,8 +48,16 @@ performance at even larger expense of area.
 We took advantage of the fact that the modulus (\(p=2^{255}-19\)) was
 known at the design time, that it is very close to a power of two, and
 the availability of 18-by-18-bit multipliers to create implement an
-efficient modular multiplication unit. The overall strategy goes as
-follows:
+efficient modular multiplication unit. The overall strategy is depicted
+in the following figure.
+
+\begin{figure}
+\label{figFemul}
+\centering \caption{Overview of modular multiplication of $255$-bit integers $a$
+and $b$. $a_0$ is the least significant 17-bit digit of $a$. Each row of the
+table in step 3 is computed in 1 clock cycle.}
+\makebox[\textwidth][c]{\includegraphics[width=\textwidth]{figs/femul.png}}%
+\end{figure}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -149,8 +155,6 @@ running time (because the ladder step is pipelined and inversion is
 not).
 
 \section{ChaCha20 Stream Cipher}\label{chacha20-stream-cipher}
-
-\emph{Author of section: Andres Erbsen}
 
 ChaCha20 is a modern stream cipher. Given a secret key, it provides fast
 random access to different positions of \(2^{130}\)-byte keystream which

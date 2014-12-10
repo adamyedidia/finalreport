@@ -45,7 +45,16 @@ even larger expense of area.
 We took advantage of the fact that the modulus ($p=2^{255}-19$) was known at the
 design time, that it is very close to a power of two, and the availability of
 18-by-18-bit multipliers to create implement an efficient modular multiplication
-unit. The overall strategy goes as follows:
+unit. The overall strategy is depicted in the following figure.
+
+\begin{figure}
+\label{figFemul}
+\centering \caption{Overview of modular multiplication of $255$-bit integers $a$
+and $b$. $a_0$ is the least significant 17-bit digit of $a$. Each row of the
+table in step 3 is computed in 1 clock cycle.}
+\makebox[\textwidth][c]{\includegraphics[width=\textwidth]{figs/femul.png}}%
+\end{figure}
+
 
 1. Interpret each 255-bit input as 15 17-bit digits. While it would have been
    possible to use 18-bit digits, choosing 17 greatly simplifies the implementation
