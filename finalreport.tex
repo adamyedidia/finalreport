@@ -28,9 +28,9 @@ century, in addition to bringing about the technologies mentioned above for
 communicating remotely (along with the technologies used to eavesdrop on them)
 also brought about the invention of clever cryptographic schemes for hiding
 information securely. These schemes go by many names; in our implementation, we
-made use of a particular implementation: the one called Diffie-Hellman key
-exchange. Diffie-Hellman key exchange begins with what we call a ``handshake'' between the two parties; an initialization phase that involves the two participants agreeing to a shared key, which will % this will is intentional
-determine the encryption protocol. The truly incredible thing about the Diffie-Hellman handshake (along
+made use of a particular implementation: the one called Diffie-Hellman-Merkle key
+exchange. Diffie-Hellman-Merkle key exchange begins with what we call a ``handshake'' between the two parties; an initialization phase that involves the two participants agreeing to a shared key, which will % this will is intentional
+determine the encryption protocol. The truly incredible thing about the Diffie-Hellman-Merkle handshake (along
 with a handful of other schemes which we did not use) is that it enables two
 interlocutors \emph{with no prior agreements or contact} to communicate securely
 in the presence of an eavesdropper \emph{who can hear everything they ever say
@@ -58,7 +58,7 @@ use the names Alice and Bob to designate the legitimate users, and Eve to design
 In order to transmit the audio across the channel, we organize the audio
 signal into packets, to be sent one at a time across the channel. It is more
 efficient to perform the cryptographic calculations when the input is in
-available in larger chunks than a single audio sample. Packets come in two types: audio packets and handshake packets, depending on whether or not the two participants in the conversation have already successfully contained the Diffie-Hellman handshake. Each packet
+available in larger chunks than a single audio sample. Packets come in two types: audio packets and handshake packets, depending on whether or not the two participants in the conversation have already successfully contained the Diffie-Hellman-Merkle handshake. Each packet
 contains a header, which serves the purpose of informing the recipient that the packet has begun. Audio packets also contain a sequence number and the audio data; handshake packets also contain a public key and information about whether or not the other person's public key has already been received. 
 
 In order to assemble a packet, we have a buffer module which 
@@ -83,7 +83,7 @@ comparing the behavior of our hardware implementations to the existing reference
 (software) implementations.
 
 The overall plan is as follows: in the very beginning of each call, the two
-communicating labkits perform a Diffie-Hellman handshake to generate a
+communicating labkits perform a Diffie-Hellman-Merkle handshake to generate a
 shared secret. That secret is used to seed a pseudo-random keystream
 generator and the digital audio signal will be xor-ed with the keystream.
 This prevents the attacker (who does not know the shared secret or the
@@ -107,7 +107,7 @@ recipient and connect these calls while maintaining the ability to eavesdrop. Cu
 make sure that the two users of ours system are indeed on the same call (and
 thus not eavesdropped on). Fortunately, this can easily be done with a one-line change to the inputs to the hex display; we felt that displaying the shared key would be more interesting for the demonstration, because it shows that the two participants have successfully agreed upon a shared protocol. 
 
-As classical Diffie-Hellman requires hundreds of modular arithmetic operations
+As classical Diffie-Hellman-Merkle requires hundreds of modular arithmetic operations
 on multiple-thousand-bit numbers to be secure, we use a modern
 variation where every modular multiplication is replaced with the addition of
 two points on a carefully chosen elliptic curve. The other relevant properties
@@ -118,13 +118,13 @@ without compromising security. Our choice of primitives goes as follows:
 
 \begin{description}
   \item[Random numbers:] Hash of 100ms of microphone input.
-  \item[Diffie-Hellman function:] Curve25519 (uses arithmetic modulo $2^{255}-19$)
+  \item[Diffie-Hellman-Merkle function:] Curve25519 (uses arithmetic modulo $2^{255}-19$)
   \item[Keystream:] ChaCha20 (uses 32-bit addition, xor, and rotation by constant).
   \item[Hash:] BLAKE (uses 32-bit addition, xor, and rotation by constant).
 \end{description}
 
 The last two were fairly straightforward to implement given the specification, as
-is implementing elliptic curve Diffie-Hellman if the underlying modular
+is implementing elliptic curve Diffie-Hellman-Merkle if the underlying modular
 arithmetic is given. Arithmetic modulo $2^{255}-19$ is a little bit more
 tricky. Addition comes down to first adding the inputs mod $2^{255}$ and then
 subtracting $2^{255}-19$ if the result overflowed (both branches can be computed
@@ -189,18 +189,22 @@ Our implementation is split into two ``phases'': Phase 1, in which the handshake
 \end{figure}
 
 \begin{figure}
-\label{fig3}
+\label{fig3b}
 \centering \caption{A block diagram of the execution of Phase 2. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
 \makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase2.png}}%
 \end{figure}
 
 \section{Controller}
 
+\emph{Author of section: Adam Yedidia. The module was jointly designed.} \\
+
 This part of the code did not have its own module, nor did it consist of very much distinct code; however, it is present in the block diagram as a design abstraction, which controls the flow of the system from Phase 1 (handshake) into Phase 2 (audio). Upon turning on the labkit, it tells the Handshake FSM module to begin the handshake; upon successful completion of the handshake, it takes the shared key output by the Handshake FSM module, feeds it into the Chacha20 module, and begins Phase 2. It can be thought of as a very high-level state machine with two states over the entire design.
 
 \section{Handshake FSM}
 
-This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman handshake that communicates the shared key to both participants. It consists of the following seven states, each one leading directly into the next: \\ \\
+\emph{Author of section: Adam Yedidia} \\
+
+This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman-Merkle handshake that communicates the shared key to both participants. It consists of the following seven states, each one leading directly into the next: \\ \\
 1. Waiting for start pulse: the state machine is idle and waiting to be told to begin. \\
 2. Computing the public key: the state machine takes as input a secret key seed, feeds it into the Curve25519 module, and waits for the computation to terminate. \\
 3. Sending the public key (no acknowledgement): the state machine sends its public key over the wire in a handshake packet, with an acknowledgement byte indicating that it has not yet received a handshake packet from its partner. It waits to receive a handshake packet from its partner. \\
@@ -211,13 +215,15 @@ This module is a finite-state machine in charge of making sure of the proper exe
 
 \section{Serial Port Modules}
 
+\emph{Author of section: Adam Yedidia. This module was jointly designed.}
+
 This pair of modules, SendFrame and ReceiveFrame, are in charge of sending data over the wire that connects the two labkits. SendFrame sends a byte of data over the wire by repeatedly calling SendBit on both the packet header and whatever information follows. \\
 
 SendBit sends a single bit over the wire, by first setting the data wire to whatever that voltage that bit corresponds to, and then setting the \verb|DATA READY| wire to high one clock cycle later (indicating that data is available to be read on the data line). \\
 
 ReceiveFrame reads a single byte off the data wire by calling ReadBit on the data wire whenever the \verb|DATA READY| signal goes high. ReadBit reads the data off the wire. ReceiveFrame knows to start parsing the information on the wire as relevant as soon as a packet header is seen. \\
 
-Because of the fact that our roughly 500mm-long wire is imperfect, errors in communication routinely occur over the wire if each bit is read off the wire only once (about one to ten errors per second). These errors are still infrequent compared to the frequency with which sound data is sent (one byte per 20 $\mu s$), but these errors can produce unpleasant popping noises over the phone line, and worse, if such an error is made during the Diffie-Hellman handshake, one of the two partners may get the wrong public key data, causing the two partners to differ about the value of the shared key and rendering all communication impossible. \\
+Because of the fact that our roughly 500mm-long wire is imperfect, errors in communication routinely occur over the wire if each bit is read off the wire only once (about one to ten errors per second). These errors are still infrequent compared to the frequency with which sound data is sent (one byte per 20 $\mu s$), but these errors can produce unpleasant popping noises over the phone line, and worse, if such an error is made during the Diffie-Hellman-Merkle handshake, one of the two partners may get the wrong public key data, causing the two partners to differ about the value of the shared key and rendering all communication impossible. \\
 
 For this reason, the ReceiveBit module ``oversamples'' the data line, meaning that it samples three times, and takes the bit it saw most frequently from those three samples. Because errors happen roughly once in a million bits sent over the wire, the probability that two out of three given samples will % this will is intentional
  be erroneous (making the possibly-dubious assumption that each sample is independent) is roughly one in 300 billion. This vastly reduced probability of error was enough for us to never observe any popping over the wire.
@@ -226,9 +232,11 @@ For this reason, the ReceiveBit module ``oversamples'' the data line, meaning th
 
 Our system makes use of two different types of data packets that can be sent over the wire. We call the two types of packets \emph{handshake packets} and \emph{audio packets} respectively.  \\
 
-% handshake packet diagram goes here
+\begin{figure}
+\label{fig1}
+\centering \caption{The layout of the two types of packets.} \includegraphics[width=\textwidth]{figs/packets.png}
+\end{figure}
 
-% caption
 Both packets begin with a \emph{packet header}: a string of bits, 10101011, that gets sent over the wire to notify the receiving labkit that transmission of the packet body is about to begin.  \\
 
 The packet body is different for each packet. Handshake packets contain the following components, which make up 272 bits: \\ \\
@@ -239,20 +247,19 @@ Audio packets contain the following components, which make up 552 bits: \\ \\
 -A sequence number (32 bits). If this is the $i^{\textrm{th}}$ packet that has been sent over the wire during this phone conversation, then the sequence number would have a value of $i$. Note that because our sequence numbers have a fixed length of 32 bits, no more than $2^{32} \approx $ 4 billion packets can be sent over the wire before the conversation becomes insecure; however, given that we only send 48,000 packets per second over the wire, the phone conversation can last about 100,000 seconds or roughly one day before it is insecure: more than the length of most any phone conversation between two ordinary people. If this design was to be used in a situation where communication was going to last for weeks or months, it would be wise to increase the size of this sequence number to 64 bits. \\
 -Encrypted audio data (512 bits). This is the result of a bitwise XOR operation that has been performed between the audio data and the output of the Chacha20 module, which outputs the cryptographic bit-stream. An attacker with access to this audio data and the public keys of both participants in the conversation cannot in a practical way deduce what is being said in the conversation. \\
 
-\begin{figure}
-\label{fig1}
-\centering \caption{The layout of the two types of packets.} \includegraphics[width=\textwidth]{figs/packets.png}
-\end{figure}
-
 \section{Buffer Logic}
 
-In the code, we did not give this part of the program an actual separate module, but instead put it directly into \verb|labkit.v|. However, both the few lines contained in the execution of the logic and our behavior in how we structured it belie its complexity; this was a very difficult module, both to think about and to execute properly. \\
+\emph{Author of section: Adam Yedidia. This module was jointly designed.}
 
-The idea of the module is that it must fill buffers with data (be it audio data or handshake data), so that it can be passed, preceded by a packet header, to the serial-port code, which can then send it over the wire. Unfortunately, this is complicated by the fact that if a buffer were to be modified during sending, that could lead to malformed packets being sent: a potential irritant for the user if it happens while audio data is being sent, and potentially catastrophic if it happens during the Diffie-Hellman handshake. \\
+In the code, we did not give this part of the program an actual separate module, but instead put it directly into \verb|labkit.v|. However, both the few lines contained in the execution of the logic and our behavior in how we structured it belie its complexity; this was a very difficult module, both to think about and to execute properly.
+
+The idea of the module is that it must fill buffers with data (be it audio data or handshake data), so that it can be passed, preceded by a packet header, to the serial-port code, which can then send it over the wire. Unfortunately, this is complicated by the fact that if a buffer were to be modified during sending, that could lead to malformed packets being sent: a potential irritant for the user if it happens while audio data is being sent, and potentially catastrophic if it happens during the Diffie-Hellman-Merkle handshake.
 
 To avoid this possibility, the module uses two BRAMs acting as buffers on both the sending and the receiving side, each with 64 slots containing one byte each. While the data from one of the two buffers is being sent over the wire, the other buffer is free to be written into for the next send. Then, when the send on the current buffer finishes, the two buffers switch roles, with the first being ready to be written into and the second relaying its data to the serial port logic to be sent.
 
 \section{Curve25519}
+
+\emph{Author of section: Andres Erbsen.}
 
 The elliptic curve cryptography implementation is the most technically involved
 part of this project. [@Curve25519] gives explicit formulas for the elliptic
@@ -277,6 +284,8 @@ implementing a dedicated modular division (inversion) unit would allow for
 significantly better performance at even larger expense of area.
 
 \section{Modular Multiplication}
+
+\emph{Author of section: Andres Erbsen.}
 
 We took advantage of the pseudo-Mersenne structure of the modulus
 ($p=2^{255}-19$) and the availability of 18-by-18-bit multipliers to create
@@ -316,5 +325,7 @@ The breakdown of time usage is roughly as follows: step 2 takes 17 cycles, step
 17-by-17-bit multipliers in dedicated silicon, the main area usage is due to the
 the accumulator registers and the 42-bit adders used for adding up columns and
 propagating carries.
+
+\input{crypto.tex}
 
 \end{document}
