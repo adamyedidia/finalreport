@@ -7,6 +7,11 @@
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage[colorlinks]{hyperref}
 
+\usepackage{tikz}
+\usepackage{geometry}
+\usetikzlibrary{matrix,chains,positioning,shapes,arrows,fit,calc}
+
+
 \title{A Cryptographically Protected Phone System}
 
 \author{Andres Erbsen and Adam Yedidia}
@@ -88,7 +93,28 @@ communicating labkits perform a Diffie-Hellman-Merkle handshake to generate a
 shared secret. That secret is used to seed a pseudo-random keystream
 generator and the digital audio signal will be xor-ed with the keystream.
 This prevents the attacker (who does not know the shared secret or the
-keystream) from recovering the audio signal. 
+keystream) from recovering the audio signal.
+
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}
+\matrix (m)[matrix of nodes, column  sep=1cm,row  sep=1mm, nodes={draw=none, anchor=center,text depth=0pt} ]{
+Alice & $g=9 \in \text{Curve25519}$ & Bob\\
+Randomly pick& & Randomly pick\\
+$a \in \{0,1\}^{256}.$ & & $b \in \{0,1\}^{256}.$ \\
+	Send $g^a$ & \mbox{ } & Send $g^b$ \\
+Compute $k_a=(g^b)^a$ & $(g^b)^a=(g^a)^b$ & Compute $k_b=(g^a)^b$ \\
+	Display $k$ & $k_a=k=k_b$ & Display $k$ \\
+};
+
+\draw[shorten <=-1.5cm,shorten >=-1.5cm] (m-1-1.south east)--(m-1-1.south west);
+\draw[shorten <=-1.5cm,shorten >=-1.5cm] (m-1-3.south east)--(m-1-3.south west);
+\draw[shorten <=-1cm,shorten >=-1cm,-latex] (m-4-2.south west)--(m-4-2.south east);
+\draw[shorten <=-1cm,shorten >=-1cm,-latex] (m-4-2.south east)--(m-4-2.south west);
+\end{tikzpicture}
+\caption{Commit-and-reveal Diffie-Hellman-Merkle Handshake}
+\end{figure}
 
 \begin{description}
   \item[Call Initialization:] Participant A chooses random $a$ and reveals $g^a$,
