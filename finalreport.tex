@@ -215,7 +215,7 @@ This module is a finite-state machine in charge of making sure of the proper exe
 
 \section{Serial Port Modules}
 
-\emph{Author of section: Adam Yedidia. This module was jointly designed.}
+\emph{Author of section: Adam Yedidia. This module was jointly designed.} \\
 
 This pair of modules, SendFrame and ReceiveFrame, are in charge of sending data over the wire that connects the two labkits. SendFrame sends a byte of data over the wire by repeatedly calling SendBit on both the packet header and whatever information follows. \\
 
@@ -241,7 +241,7 @@ Both packets begin with a \emph{packet header}: a string of bits, 10101011, that
 
 The packet body is different for each packet. Handshake packets contain the following components, which make up 272 bits: \\ \\
 -An acknowledgement byte (8 bits), depending on whether or not the labkit sending the handshake packet has yet successfully received a handshake packet from its partner. An acknowledgement byte of 01100110 means ``I have not yet received a handshake packet from you'' and an acknowledgement byte of 100110011 means ``I have received a handshake packet from you.''  \\
--The transmitter's unmodified public key (256 bits). Note that because this key is being transmitted over the channel without any modification, an attacker can read the public key; however, due to modern cryptographic hardness conjectures, an attacker with access to both public keys would not be able to find the shared key without running an algorithm that would take years if not millenia to complete (without drastically improving state-of-the-art elliptic-curve-discrete-logarithm algorithms).
+-The transmitter's unmodified public key (256 bits). Note that because this key is being transmitted over the channel without any modification, an attacker can read the public key; however, due to modern cryptographic hardness conjectures, an attacker with access to both public keys would not be able to find the shared key without running an algorithm that would take years if not millenia to complete (without drastically improving state-of-the-art elliptic-curve-discrete-logarithm algorithms). \\
 
 Audio packets contain the following components, which make up 552 bits: \\ \\
 -A sequence number (32 bits). If this is the $i^{\textrm{th}}$ packet that has been sent over the wire during this phone conversation, then the sequence number would have a value of $i$. Note that because our sequence numbers have a fixed length of 32 bits, no more than $2^{32} \approx $ 4 billion packets can be sent over the wire before the conversation becomes insecure; however, given that we only send 48,000 packets per second over the wire, the phone conversation can last about 100,000 seconds or roughly one day before it is insecure: more than the length of most any phone conversation between two ordinary people. If this design was to be used in a situation where communication was going to last for weeks or months, it would be wise to increase the size of this sequence number to 64 bits. \\
@@ -249,7 +249,7 @@ Audio packets contain the following components, which make up 552 bits: \\ \\
 
 \section{Buffer Logic}
 
-\emph{Author of section: Adam Yedidia. This module was jointly designed.}
+\emph{Author of section: Adam Yedidia. This module was jointly designed.} \\
 
 In the code, we did not give this part of the program an actual separate module, but instead put it directly into \verb|labkit.v|. However, both the few lines contained in the execution of the logic and our behavior in how we structured it belie its complexity; this was a very difficult module, both to think about and to execute properly.
 
@@ -259,7 +259,7 @@ To avoid this possibility, the module uses two BRAMs acting as buffers on both t
 
 \section{Curve25519}
 
-\emph{Author of section: Andres Erbsen.}
+\emph{Author of section: Andres Erbsen.} \\
 
 The elliptic curve cryptography implementation is the most technically involved
 part of this project. [@Curve25519] gives explicit formulas for the elliptic
@@ -285,7 +285,7 @@ significantly better performance at even larger expense of area.
 
 \section{Modular Multiplication}
 
-\emph{Author of section: Andres Erbsen.}
+\emph{Author of section: Andres Erbsen.} \\
 
 We took advantage of the pseudo-Mersenne structure of the modulus
 ($p=2^{255}-19$) and the availability of 18-by-18-bit multipliers to create
@@ -327,5 +327,9 @@ the accumulator registers and the 42-bit adders used for adding up columns and
 propagating carries.
 
 \input{crypto.tex}
+
+\section{Conclusion}
+
+We successfully implemented a fully functional phone system that is safe from eavesdropping against any currently-known attacks. Our phone system remains less practical than a cell phone from a usability point of view; however, we hope that this report helps make clear that implementations of cryptography that protect communications from eavesdropping are entirely practical to implement. There isn't a good reason why many of our communications aren't cryptographically protected. We hope that in the future, measures similar to the ones we implemented are adopted.
 
 \end{document}
