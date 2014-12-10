@@ -29,8 +29,9 @@ communicating remotely (along with the technologies used to eavesdrop on them)
 also brought about the invention of clever cryptographic schemes for hiding
 information securely. These schemes go by many names; in our implementation, we
 made use of a particular implementation: the one called Diffie-Hellman key
-exchange. Diffie-Hellman key exchange begins with what we call a ``handshake'' between the two parties; an initialization phase that involves the two participants agreeing to a shared key, which will determine the encryption protocol. The truly incredible thing about the Diffie-Hellman handshake (along
-with a handful of other schemes which we will not use) is that it enables two
+exchange. Diffie-Hellman key exchange begins with what we call a ``handshake'' between the two parties; an initialization phase that involves the two participants agreeing to a shared key, which will % this will is intentional
+determine the encryption protocol. The truly incredible thing about the Diffie-Hellman handshake (along
+with a handful of other schemes which we did not use) is that it enables two
 interlocutors \emph{with no prior agreements or contact} to communicate securely
 in the presence of an eavesdropper \emph{who can hear everything they ever say
 to each other, including the entire handshake}. Conditioned on the hardness of various problems which are widely
@@ -38,14 +39,17 @@ believed to in fact be very difficult to solve by the wider academic community,
 it is in fact provably intractable for the eavesdropper to hear the
 communications.
 
-In what follows, we will give a detailed description a hardware implementation of a telephone
-system that will be cryptographically protected in a theoretically defensible
+In what follows, we will % this will is intentional
+give a detailed description a hardware implementation of a telephone
+system that is cryptographically protected in a theoretically defensible
 way; that is, for an attacker to be able to eavesdrop on a call using our
 telephone system would require either a long-standing conjecture to be false, or
 would require more vastly more computational power than is available to the
 world today. We begin this report with a high-level description of the ideas and concepts behind what we did; in the second half of the report, we give more low-level, detailed descriptions of how we actually implemented all the high-level ideas, and the challenges we encountered in that process.
 
-At various points in this paper, we will find it convenient to describe two hypothetical users of our system, and a hypothetical attacker; in general, we will use the names Alice and Bob to designate the legitimate users, and Eve to designate the eavesdropper.
+At various points in this paper, we will % this will is intentional
+find it convenient to describe two hypothetical users of our system, and a hypothetical attacker; in general, we will % this will is intentional
+use the names Alice and Bob to designate the legitimate users, and Eve to designate the eavesdropper.
 
 \chapter{High-Level Description}
 
@@ -60,7 +64,7 @@ contains a header, which serves the purpose of informing the recipient that the 
 In order to assemble a packet, we have a buffer module which 
 accumulates the bits before sending them all at once in packet form. The buffer
 makes use of the BRAMs in order to be as efficient as possible, and because
-it will be storing a potentially large amount of memory (so simply using
+it is storing a potentially large amount of memory (so simply using
 flip-flops would be a waste of valuable programmable logic).
 
 Finally, the packets themselves are transmitted over a simple wire that
@@ -70,22 +74,20 @@ The wire is long and has a certain amount of noise, so we oversample (look at th
 \section{Cryptographic protection}
 
 As it is easy for an individual to come up with a cryptosystem that they
-themselves cannot break, but harder to create one that will withstand attacks
+themselves cannot break, but harder to create one that will % this will is intentional
+withstand attacks
 from others, we based our design on existing well-audited building
 blocks. As we are not aware of any freely available Verilog implementations of
-these algorithms, we will be implementing them and verify their correctness by
+these algorithms, we implemented them and verified their correctness by
 comparing the behavior of our hardware implementations to the existing reference
 (software) implementations.
 
 The overall plan is as follows: in the very beginning of each call, the two
 communicating labkits perform a Diffie-Hellman handshake to generate a
-shared secret. That secret will be used to seed a pseudo-random keystream
+shared secret. That secret is used to seed a pseudo-random keystream
 generator and the digital audio signal will be xor-ed with the keystream.
 This prevents the attacker (who does not know the shared secret or the
-keystream) from recovering the audio signal. To also prevent the attacker from
-selectively modifying the audio, each audio packet will be accompanied by a
-128-bit authenticator that can only be computed for a message by a party that
-knows the secret key -- the callers, but not the attacker.
+keystream) from recovering the audio signal. 
 
 \begin{description}
   \item[Call Initialization:] Participant A chooses random $a$ and reveals $g^a$,
@@ -109,7 +111,7 @@ As classical Diffie-Hellman requires hundreds of modular arithmetic operations
 on multiple-thousand-bit numbers to be secure, we use a modern
 variation where every modular multiplication is replaced with the addition of
 two points on a carefully chosen elliptic curve. The other relevant properties
-of elliptic curve addition are the same as for modular multiplication, we will
+of elliptic curve addition are the same as for modular multiplication, we will % this will is intentional
 even continue to use the classical notation. Even though one elliptic curve
 addition uses more than one modular multiplication, smaller numbers can be used
 without compromising security. Our choice of primitives goes as follows:
@@ -156,11 +158,13 @@ It is the nature of practical cryptography that it is very difficult to prove th
 
 \subsection{Brute-Force Attacks} 
 
-This class of possible attacks has as its goal to learn through algorithmic means either of the interlocutors' secret keys, which will be enough to let the attacker compute the shared secret and the decryption of the message. Assuming that division in the space of elliptic curve functions is computationally difficult (which is widely believed in the academic community to be true) this class of possible attacks won't succeed against our system because of the fact that the only algorithms able to find an interlocutor's secret key as a function of their public key take exponential time; moreover, our key length is long enough that no implementation of any algorithm has come close to being able to do this.
+This class of possible attacks has as its goal to learn through algorithmic means either of the interlocutors' secret keys, which is enough to let the attacker compute the shared secret and the decryption of the message. Assuming that division in the space of elliptic curve functions is computationally difficult (which is widely believed in the academic community to be true) this class of possible attacks won't succeed against our system because of the fact that the only algorithms able to find an interlocutor's secret key as a function of their public key take exponential time; moreover, our key length is long enough that no implementation of any algorithm has come close to being able to do this.
 
 \subsection{Man-in-the-Middle Attacks}
 
-This type of attack is based off the idea of spoofing the two interlocutors into thinking that they are talking to each other, when in fact, they are both talking to the attacker and the attacker is relaying messages between them. No amount of security on the channel itself can protect against an attack of this kind, since the attacker's ability to hear the communications comes from the fact that two participants in a phone conversation can hear the communications--something that is necessary for the basic functioning of a telephone system. However, we can give t the interlocutors the ability to know when there is a man-in-the-middle attacker, by giving everyone access to the public key of a given other person, and also giving them access to the public key of the person they're talking to. If the Alice believes herself to be speaking to Bob, but is actually speaking to Eve, who is executing a man-in-the-middle attack, then she will see both Bob and Eve's public keys displayed on her phone's screen, and this will tell her that she is not speaking to the person she think she is. This is the basic idea; in reality, we would display not the public key itself (which is much too long to display) but a hash thereof, and if Bob and Eve's public keys were different, then the hashes would be virtually certain to also be different, assuming we used a cryptographic hash function (a hash function which is computationally difficult to invert).
+This type of attack is based off the idea of spoofing the two interlocutors into thinking that they are talking to each other, when in fact, they are both talking to the attacker and the attacker is relaying messages between them. No amount of security on the channel itself can protect against an attack of this kind, since the attacker's ability to hear the communications comes from the fact that two participants in a phone conversation can hear the communications--something that is necessary for the basic functioning of a telephone system. However, we can give t the interlocutors the ability to know when there is a man-in-the-middle attacker, by giving everyone access to the public key of a given other person, and also giving them access to the public key of the person they're talking to. If the Alice believes herself to be speaking to Bob, but is actually speaking to Eve, who is executing a man-in-the-middle attack, then she will % this will is intentional
+see both Bob and Eve's public keys displayed on her phone's screen, and this will % this will is intentional
+tell her that she is not speaking to the person she think she is. This is the basic idea; in reality, we would display not the public key itself (which is much too long to display) but a hash thereof, and if Bob and Eve's public keys were different, then the hashes would be virtually certain to also be different, assuming we used a cryptographic hash function (a hash function which is computationally difficult to invert).
 
 \subsection{Data Manipulation Attacks}
 
@@ -196,7 +200,7 @@ This part of the code did not have its own module, nor did it consist of very mu
 
 \section{Handshake FSM}
 
-This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman handshake that will communicate the shared key to both participants. It consists of the following seven states, each one leading directly into the next: \\ \\
+This module is a finite-state machine in charge of making sure of the proper execution of the Diffie-Hellman handshake that communicates the shared key to both participants. It consists of the following seven states, each one leading directly into the next: \\ \\
 1. Waiting for start pulse: the state machine is idle and waiting to be told to begin. \\
 2. Computing the public key: the state machine takes as input a secret key seed, feeds it into the Curve25519 module, and waits for the computation to terminate. \\
 3. Sending the public key (no acknowledgement): the state machine sends its public key over the wire in a handshake packet, with an acknowledgement byte indicating that it has not yet received a handshake packet from its partner. It waits to receive a handshake packet from its partner. \\
@@ -215,7 +219,8 @@ ReceiveFrame reads a single byte off the data wire by calling ReadBit on the dat
 
 Because of the fact that our roughly 500mm-long wire is imperfect, errors in communication routinely occur over the wire if each bit is read off the wire only once (about one to ten errors per second). These errors are still infrequent compared to the frequency with which sound data is sent (one byte per 20 $\mu s$), but these errors can produce unpleasant popping noises over the phone line, and worse, if such an error is made during the Diffie-Hellman handshake, one of the two partners may get the wrong public key data, causing the two partners to differ about the value of the shared key and rendering all communication impossible. \\
 
-For this reason, the ReceiveBit module ``oversamples'' the data line, meaning that it samples three times, and takes the bit it saw most frequently from those three samples. Because errors happen roughly once in a million bits sent over the wire, the probability that two out of three given samples will be erroneous (making the possibly-dubious assumption that each sample is independent) is roughly one in 300 billion. This vastly reduced probability of error was enough for us to never observe any popping over the wire.
+For this reason, the ReceiveBit module ``oversamples'' the data line, meaning that it samples three times, and takes the bit it saw most frequently from those three samples. Because errors happen roughly once in a million bits sent over the wire, the probability that two out of three given samples will % this will is intentional
+ be erroneous (making the possibly-dubious assumption that each sample is independent) is roughly one in 300 billion. This vastly reduced probability of error was enough for us to never observe any popping over the wire.
 
 \section{Packet Structure}
 
@@ -298,8 +303,8 @@ because it is a sum of 17 products of two 17-bit numbers times 19. \\
 4. Handle carries from the two most significant columns, adding the number of
 overflows times 19 to the result as before. \\
 5. Handle all remaining carries starting from the least significant column and
-moving towards towards the most significant column. The result will be
-between $0$ and $2p$. \\
+moving towards towards the most significant column. The result will % this will is intentional
+be between $0$ and $2p$. \\
 6. If the result overflows (has a carry of 1), subtract $p$ from it. This is \emph{not}  implemented as a
 separate step. Instead, there are two copies of steps 4 and 5, one of which
 works as described and the other subtracts the appropriate digit of $p$ while
