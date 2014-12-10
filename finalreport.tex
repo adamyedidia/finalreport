@@ -121,9 +121,7 @@ Compute $k_a=(g^b)^a$ & $(g^b)^a=(g^a)^b$ & Compute $k_b=(g^a)^b$ \\
 	  B chooses $b$, reveals $g^b$; both compute $s=g^{ab}$. $g$ is a public constant.
   \item[Encryption:] $\text{encrypted}_i = \text{data}_i \mathbin{\oplus} \text{keystream}(s,i)$
   \item[Decryption:] $\text{data}_i = \text{encrypted}_i \mathbin{\oplus} \text{keystream}(s,i)$
-  \item[Packetization:] $\text{packet}_i = \left(type, i, \text{length}(\text{encrypted}_i), \text{encrypted}_i\right)$
-  \item[Authentication:] $\text{authenticator}_i = \text{hash}(s, \text{packet}_i)$
-  \item[Auth. checking:] Accept received packet iff $\text{hash}(s, \text{packet}_i) = \text{authenticator}_i$.
+  \item[Packetization:] $\text{packet}_i = (\text{header}, \text{sequence number}, \text{encrypted}_i)$
 \end{description}
 
 The described mechanisms are sufficient against an attacker that can not only see
@@ -188,13 +186,13 @@ Our implementation is split into two ``phases'': Phase 1, in which the handshake
 
 \begin{figure}
 \label{fig3}
-\makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase1.png}}%
+\makebox[\textwidth][c]{\includegraphics[width=1.5\textwidth]{figs/phase1.png}}%
 \centering \caption{A block diagram of the execution of Phase 1. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
 \end{figure}
 
 \begin{figure}
 \label{fig3b}
-\makebox[\textwidth][c]{\includegraphics[width=1.7\textwidth]{figs/phase2.png}}%
+\makebox[\textwidth][c]{\includegraphics[width=1.5\textwidth]{figs/phase2.png}}%
 \centering \caption{A block diagram of the execution of Phase 2. Thick lines indicate external wires (which the attacker has access to), whereas arrows indicate internal wires (which the attacker does not have access to). For clarity, we show only the information flowing from Alice to Bob; in reality, this entire design is duplicated in the other direction.}
 \end{figure}
 
@@ -219,7 +217,7 @@ This module is a finite-state machine in charge of making sure of the proper exe
 
 \section{Serial Port Modules}
 
-\emph{Author of section: Adam Yedidia. This module was jointly designed.}
+\emph{Author of section: Adam Yedidia. This module was jointly designed.} \\
 
 This pair of modules, SendFrame and ReceiveFrame, are in charge of sending data over the wire that connects the two labkits. SendFrame sends a byte of data over the wire by repeatedly calling SendBit on both the packet header and whatever information follows. \\
 
@@ -246,7 +244,7 @@ Both packets begin with a \emph{packet header}: a string of bits, 10101011, that
 
 The packet body is different for each packet. Handshake packets contain the following components, which make up 272 bits: \\ \\
 -An acknowledgement byte (8 bits), depending on whether or not the labkit sending the handshake packet has yet successfully received a handshake packet from its partner. An acknowledgement byte of 01100110 means ``I have not yet received a handshake packet from you'' and an acknowledgement byte of 100110011 means ``I have received a handshake packet from you.''  \\
--The transmitter's unmodified public key (256 bits). Note that because this key is being transmitted over the channel without any modification, an attacker can read the public key; however, due to modern cryptographic hardness conjectures, an attacker with access to both public keys would not be able to find the shared key without running an algorithm that would take years if not millenia to complete (without drastically improving state-of-the-art elliptic-curve-discrete-logarithm algorithms).
+-The transmitter's unmodified public key (256 bits). Note that because this key is being transmitted over the channel without any modification, an attacker can read the public key; however, due to modern cryptographic hardness conjectures, an attacker with access to both public keys would not be able to find the shared key without running an algorithm that would take years if not millenia to complete (without drastically improving state-of-the-art elliptic-curve-discrete-logarithm algorithms). \\
 
 Audio packets contain the following components, which make up 552 bits: \\ \\
 -A sequence number (32 bits). If this is the $i^{\textrm{th}}$ packet that has been sent over the wire during this phone conversation, then the sequence number would have a value of $i$. Note that because our sequence numbers have a fixed length of 32 bits, no more than $2^{32} \approx $ 4 billion packets can be sent over the wire before the conversation becomes insecure; however, given that we only send 48,000 packets per second over the wire, the phone conversation can last about 100,000 seconds or roughly one day before it is insecure: more than the length of most any phone conversation between two ordinary people. If this design was to be used in a situation where communication was going to last for weeks or months, it would be wise to increase the size of this sequence number to 64 bits. \\
@@ -254,13 +252,88 @@ Audio packets contain the following components, which make up 552 bits: \\ \\
 
 \section{Buffer Logic}
 
-\emph{Author of section: Adam Yedidia. This module was jointly designed.}
+\emph{Author of section: Adam Yedidia. This module was jointly designed.} \\
 
 In the code, we did not give this part of the program an actual separate module, but instead put it directly into \verb|labkit.v|. However, both the few lines contained in the execution of the logic and our behavior in how we structured it belie its complexity; this was a very difficult module, both to think about and to execute properly.
 
 The idea of the module is that it must fill buffers with data (be it audio data or handshake data), so that it can be passed, preceded by a packet header, to the serial-port code, which can then send it over the wire. Unfortunately, this is complicated by the fact that if a buffer were to be modified during sending, that could lead to malformed packets being sent: a potential irritant for the user if it happens while audio data is being sent, and potentially catastrophic if it happens during the Diffie-Hellman-Merkle handshake.
 
 To avoid this possibility, the module uses two BRAMs acting as buffers on both the sending and the receiving side, each with 64 slots containing one byte each. While the data from one of the two buffers is being sent over the wire, the other buffer is free to be written into for the next send. Then, when the send on the current buffer finishes, the two buffers switch roles, with the first being ready to be written into and the second relaying its data to the serial port logic to be sent.
+
+\section{Curve25519}
+
+\emph{Author of section: Andres Erbsen.} \\
+
+The elliptic curve cryptography implementation is the most technically involved
+part of this project. [@Curve25519] gives explicit formulas for the elliptic
+curve arithmetic in terms of operations on integers modulo $2^{255} - 19$. Our
+implementation of the `curve25519` module follows the figure presented in the
+appendix of that paper and makes use of the properties of our modular arithmetic
+modules to provide better performance. To save area, the circuit has only one
+copy of the modular multiplication unit and one add/subtract unit; these are
+used in sequence to compute the elliptic curve operation. Furthermore, as the
+latency of our modular multiplication unit is twice as high as the latency of
+the addition/subtraction unit, but the throughput is the same, we did our best
+to keep the multiplication pipeline active at all times. This results in using 7
+255-bit registers to store the intermediate values, in addition to the internal
+registers of the modular arithmetic units. All in all, our implementation
+requires less than 70000 cycles to perform an elliptic curve operation (public
+key generation or shared key generation). Our implementation is a trade-off
+between speed, circuit area, and complexity. We believe that more careful
+pipeline management could offer slightly better speeds for any area, storing the
+intermediate values of the elliptic curve operations in block RAM instead of
+registers would allow for a smaller area at the expense of speed, and
+implementing a dedicated modular division (inversion) unit would allow for
+significantly better performance at even larger expense of area.
+
+\section{Modular Multiplication}
+
+\emph{Author of section: Andres Erbsen.} \\
+
+We took advantage of the pseudo-Mersenne structure of the modulus
+($p=2^{255}-19$) and the availability of 18-by-18-bit multipliers to create
+implement an efficient modular multiplication unit. The overall strategy goes as
+follows: \\ \\
+1. Interpret each 255-bit input as 15 17-bit digits. While it would have been
+possible to use 18-bit digits, choosing 17 greatly simplifies the implementation
+because 255 bits can be evenly divided into 17-bit digits but not into 18-bit
+digits. \\
+2. Perform an algorithm similar to schoolbook multiplication, where \\
+- During each clock cycle, one row of partial products is computed \\
+- Each partial product that would eventually overflow the 255-bit result
+because of its position is omitted from the calculation. \\
+- However, the overflowing partial product is not discarded. As the modulus
+is \emph{not} a power of two, correct for the difference between two's
+complement integer overflow and addition mod $p$ by adding 19 times the number
+of times the overflow wrapped around to the result. Because there must be an
+empty low order partial product slot for each partial product that is statically
+known to overflow, no addition needs to be performed: the just system places 19
+times the overflowing partial product to the correct slot. \\
+3. Cumulatively add up the columns of partial products, but do not handle
+carries between them. The sum of each column has an upper bound of 42 bits
+because it is a sum of 17 products of two 17-bit numbers times 19. \\
+4. Handle carries from the two most significant columns, adding the number of
+overflows times 19 to the result as before. \\
+5. Handle all remaining carries starting from the least significant column and
+moving towards towards the most significant column. The result will % this will is intentional
+be between $0$ and $2p$. \\
+6. If the result overflows (has a carry of 1), subtract $p$ from it. This is \emph{not}  implemented as a
+separate step. Instead, there are two copies of steps 4 and 5, one of which
+works as described and the other subtracts the appropriate digit of $p$ while
+handling each carry. The correct output is selected amongst the two branches
+using the carry bit. \\
+
+The breakdown of time usage is roughly as follows: step 2 takes 17 cycles, step
+4 takes 1 cycle, and step 5 takes 17 cycles. As the FPGA provides fast
+17-by-17-bit multipliers in dedicated silicon, the main area usage is due to the
+the accumulator registers and the 42-bit adders used for adding up columns and
+propagating carries.
+
+\input{crypto.tex}
+
+\section{Conclusion}
+
+We successfully implemented a fully functional phone system that is safe from eavesdropping against any currently-known attacks. Our phone system remains less practical than a cell phone from a usability point of view; however, we hope that this report helps make clear that implementations of cryptography that protect communications from eavesdropping are entirely practical to implement. There isn't a good reason why many of our communications aren't cryptographically protected. We hope that in the future, measures similar to the ones we implemented are adopted.
 
 \input{crypto.tex}
 
