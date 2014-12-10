@@ -130,17 +130,18 @@ pipelined and inversion is not).
 # ChaCha20 Stream Cipher
 
 \emph{Author of section and module: Andres Erbsen.}   
-ChaCha20 is a modern stream cipher. Given a secret key, it provides fast random
-access to different positions of $2^{130}$-byte keystream which is XOR-ed with
-the data to encrypt it. The procedure to compute a 64-byte block of keystream
-consists of 20 rounds, each of which mutates a 4-by-4 table of 32-bit words
-by applying the *quarter round* function to all columns or all diagonals.
-A quarter round takes 4 32-bit inputs and produces 4 32-bit outputs, mixing the
-bits of the input using addition, rotation and XOR. Our circuit has four
-instantiations of the quarter round module, and one of the twenty rounds is
-completed each clock cycle. Finally, the output is computed by adding the
-initial table entries to the final table entries (round 21 in our
-implementation).
+ChaCha20[4] is a modern stream cipher that offers excellent performance, and so
+far even severely crippled versions of it have withstood all attacks[5]. Given a
+secret key, it provides fast random access to different positions of
+$2^{130}$-byte keystream which is XOR-ed with the data to encrypt it. The
+procedure to compute a 64-byte block of keystream consists of 20 rounds, each of
+which mutates a 4-by-4 table of 32-bit words by applying the *quarter round*
+function to all columns or all diagonals.  A quarter round takes 4 32-bit inputs
+and produces 4 32-bit outputs, mixing the bits of the input using addition,
+rotation and XOR. Our circuit has four instantiations of the quarter round
+module, and one of the twenty rounds is completed each clock cycle. Finally, the
+output is computed by adding the initial table entries to the final table
+entries (round 21 in our implementation).
 
 This implementation provides good performance (3 bytes/cycle), but the
 propagation delay of the circuit is rather large, limiting us to clock
@@ -151,8 +152,9 @@ quarter round function.
 # Keccak hash function
 
 \emph{Author of section: Andres Erbsen.}   
-We used an open-source Keccak implementation by Homer Hsing, available at
-`opencores.org`. The input is sent to the Keccak module in chunks of 1 to 4
-bytes, the output is a 512-bit high-quality pseudo-random blob generated as a
-function of the input. The implementation we used advertises a speed of
-2.4Gbit/s at 100MHz, but we used it at a much slower rate (less than 1Mbit/s).  
+We used an open-source Keccak (recently known as SHA3[6]) implementation by
+Homer Hsing[7], available at `opencores.org`. The input is sent to the Keccak
+module in chunks of 1 to 4 bytes, the output is a 512-bit high-quality
+pseudo-random blob generated as a function of the input. The implementation we
+used advertises a speed of 2.4Gbit/s at 100MHz, but we used it at a much slower
+rate (less than 1Mbit/s).  

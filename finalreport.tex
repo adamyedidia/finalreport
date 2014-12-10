@@ -35,10 +35,10 @@ determine the encryption protocol. The truly incredible thing about the Diffie-H
 with a handful of other schemes which we did not use) is that it enables two
 interlocutors \emph{with no prior agreements or contact} to communicate securely
 in the presence of an eavesdropper \emph{who can hear everything they ever say
-to each other, including the entire handshake}. Conditioned on the hardness of various problems which are widely
+to each other, including the entire handshake}[1][2]. Conditioned on the hardness of various problems which are widely
 believed to in fact be very difficult to solve by the wider academic community,
 it is in fact provably intractable for the eavesdropper to hear the
-communications.
+communications[3].
 
 In what follows, we will % this will is intentional
 give a detailed description a hardware implementation of a telephone
@@ -117,33 +117,10 @@ without compromising security. Our choice of primitives goes as follows:
 
 \begin{description}
   \item[Random numbers:] Hash of 100ms of microphone input.
-  \item[Diffie-Hellman-Merkle function:] Curve25519 (uses arithmetic modulo $2^{255}-19$)
-  \item[Keystream:] ChaCha20 (uses 32-bit addition, xor, and rotation by constant).
+  \item[Diffie-Hellman-Merkle function:] Curve25519[8] (uses arithmetic modulo $2^{255}-19$)
+  \item[Keystream:] ChaCha20[5] (uses 32-bit addition, xor, and rotation by constant).
   \item[Hash:] BLAKE (uses 32-bit addition, xor, and rotation by constant).
 \end{description}
-
-The last two were fairly straightforward to implement given the specification, as
-is implementing elliptic curve Diffie-Hellman-Merkle if the underlying modular
-arithmetic is given. Arithmetic modulo $2^{255}-19$ is a little bit more
-tricky. Addition comes down to first adding the inputs mod $2^{255}$ and then
-subtracting $2^{255}-19$ if the result overflowed (both branches can be computed
-in parallel); subtraction is similar.  Multiplication is performed by breaking
-the 255-bit number into 15 17-bit digits and applying the schoolbook
-multiplication algorithm, one row of partial products at a time. To modify the
-schoolbook multiplication to work modulo $2^{255}$, the partial products that
-would be too far on the higher order side are wrap over back to the lower order
-digits; the difference between working modulo $2^{255}$ and module $2^{255}-19$
-can be corrected for by multiplying all wrapped-around partial products by 19.
-The partial products for each column are added up as they are generated. To
-compute the final 255-bit answer, we first handle carries from the higher-order
-digits that definitely cause the final answer to pass $2^{255}-19$ by adding the
-number of passes times 19 to the lowest order digit. As the carries from the
-lower order digits to the higher order digits might also cause the answer to
-pass $2^{255}-19$ (but only once), answer$-2^{255}-19$ is computed together with
-the final answer when the last carries are handled and the one that is in the
-valid range is returned. Exponentiation is implemented using the standard
-square-and-multiply technique, Fermat's little theorem is used to provide a slow
-but simple division circuit.
 
 \section{Resulting User Experience}
 
